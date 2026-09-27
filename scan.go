@@ -9,20 +9,17 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"sync"
-	"sync/atomic"
 	"time"
 )
 
 // ====================== CONFIG ======================
 const (
-	Workers = 128              // Concurrent pings (lower on Termux if needed)
-	Timeout = 800 * time.Millisecond
+	Timeout = 600 * time.Millisecond // Ping timeout
 )
 
 // ====================================================
 
-// Official Cloudflare IPv4 ranges (from https://www.cloudflare.com/ips-v4/)
+// Official Cloudflare IPv4 ranges
 var cfRanges = []string{
 	"173.245.48.0/20",
 	"103.21.244.0/22",
@@ -47,7 +44,6 @@ func isAlive(ip string) bool {
 	if runtime.GOOS == "windows" {
 		cmd = exec.Command("ping", "-n", "1", "-w", fmt.Sprintf("%d", Timeout.Milliseconds()), ip)
 	} else {
-		// Linux / Termux / macOS
 		cmd = exec.Command("ping", "-c", "1", "-W", fmt.Sprintf("%d", int(Timeout.Seconds())), ip)
 	}
 
@@ -56,24 +52,9 @@ func isAlive(ip string) bool {
 	return cmd.Run() == nil
 }
 
-func expandCIDR(cidr string) ([]string, error) {
-	_, ipNet, err := net.ParseCIDR(cidr)
-	if err != nil {
-		return nil, err
-	}
-
-	var ips []string
-	for ip := ipNet.IP.Mask(ipNet.Mask); ipNet.Contains(ip); inc(ip) {
-		if !ip.Equal(ipNet.IP) && !isBroadcast(ip, ipNet) {
-			ips = append(ips, ip.String())
-		}
-	}
-	return ips, nil
-}
-
 func showMenu() []string {
 	fmt.Println(strings.Repeat("=", 55))
-	fmt.Println("   CF Edge Scanner (Go)  |  Official Cloudflare Ranges")
+	fmt.Println("   CF Edge Scanner (Low Memory)  |  Sequential Ping")
 	fmt.Println(strings.Repeat("=", 55))
 	fmt.Println()
 
@@ -110,7 +91,7 @@ func showMenu() []string {
 		}
 
 		if input == "0" {
-			fmt.Print("You selected ALL ranges (millions of IPs). Continue? [y/N]: ")
+			fmt.Print("You selected ALL ranges. Continue? [y/N]: ")
 			confirm, _ := reader.ReadString('\n')
 			if strings.TrimSpace(strings.ToLower(confirm)) == "y" {
 				return append([]string{}, cfRanges...)
@@ -170,59 +151,41 @@ func main() {
 		fmt.Printf("  • %s\n", c)
 	}
 	fmt.Println()
+	fmt.Println("Mode: Sequential (1 IP at a time) — Low memory")
+	fmt.Println("Starting scan...\n")
 
-	fmt.Println("Expanding CIDRs... this may take a moment for large ranges.")
-	var allIPs []string
+	var alive []string
+	scanned := 0
+
 	for _, cidr := range selected {
-		ips, err := expandCIDR(cidr)
+		_, ipNet, err := net.ParseCIDR(cidr)
 		if err != nil {
 			fmt.Printf("[!] Skipping %s: %v\n", cidr, err)
 			continue
 		}
-		allIPs = append(allIPs, ips...)
-	}
 
-	total := len(allIPs)
-	if total == 0 {
-		fmt.Println("No IPs to scan.")
-		return
-	}
+		fmt.Printf("--- Scanning %s ---\n", cidr)
 
-	fmt.Printf("Total hosts to scan: %s\n", formatNumber(total))
-	fmt.Printf("Workers: %d  |  Timeout: %v\n", Workers, Timeout)
-	fmt.Println("Starting scan...\n")
-
-	var (
-		alive   []string
-		mu      sync.Mutex
-		wg      sync.WaitGroup
-		sems    = make(chan struct{}, Workers)
-		scanned int64
-	)
-
-	for _, ip := range allIPs {
-		wg.Add(1)
-		go func(ip string) {
-			defer wg.Done()
-			sems <- struct{}{}
-			defer func() { <-sems }()
-
-			if isAlive(ip) {
-				mu.Lock()
-				alive = append(alive, ip)
-				fmt.Printf("[+] %s\n", ip)
-				mu.Unlock()
+		for ip := ipNet.IP.Mask(ipNet.Mask); ipNet.Contains(ip); inc(ip) {
+			if ip.Equal(ipNet.IP) || isBroadcast(ip, ipNet) {
+				continue
 			}
 
-			count := atomic.AddInt64(&scanned, 1)
-			if count%500 == 0 || count == int64(total) {
-				fmt.Printf("    ... %d/%d scanned  |  %d alive\r", count, total, len(alive))
-			}
-		}(ip)
-	}
+			ipStr := ip.String()
+			scanned++
 
-	wg.Wait()
-	fmt.Println()
+			if isAlive(ipStr) {
+				alive = append(alive, ipStr)
+				fmt.Printf("[+] %s\n", ipStr)
+			}
+
+			// Progress every 200 IPs
+			if scanned%200 == 0 {
+				fmt.Printf("    ... %d scanned  |  %d alive\r", scanned, len(alive))
+			}
+		}
+		fmt.Println()
+	}
 
 	// Save results
 	timestamp := time.Now().Format("20060102_150405")
@@ -239,8 +202,8 @@ func main() {
 		f.WriteString(ip + "\n")
 	}
 
-	fmt.Println("\n" + strings.Repeat("=", 50))
-	fmt.Printf("Done! %s/%s hosts are reachable\n", formatNumber(len(alive)), formatNumber(total))
+	fmt.Println(strings.Repeat("=", 50))
+	fmt.Printf("Done! %d alive out of %d scanned\n", len(alive), scanned)
 	fmt.Printf("Results saved to: %s\n", filename)
 	fmt.Println(strings.Repeat("=", 50))
 
