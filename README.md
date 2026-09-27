@@ -7,7 +7,7 @@ When you start the scanner you can choose **which ranges** to scan (one, several
 Works on:
 - **Termux** (Android)
 - Linux
-- Windows 10/11
+- **Windows 10/11** (Laptop & Desktop)
 - macOS / Chromebook (Linux)
 
 ---
@@ -19,7 +19,7 @@ Works on:
 | **Go**      | `scan.go`  | Laptop / Chromebook / Desktop   | Very Fast |
 | **Python**  | `scan.py`  | Easy & Termux                   | Good      |
 
-**Recommendation:** Use the **Go** version on laptop or Chromebook — it is faster and lighter.
+**Recommendation:** Use the **Go** version on laptop or Windows 11 — it is faster and lighter.
 
 ---
 
@@ -27,7 +27,34 @@ Works on:
 
 ### Go Version (Recommended)
 
-#### Termux
+#### Windows 11 (Laptop / Desktop)
+
+1. **Install Git**  
+   Download: https://git-scm.com/download/win  
+   (Just click Next → Next → Install)
+
+2. **Install Go**  
+   Download: https://go.dev/dl/  
+   Choose the Windows `.msi` installer → Next → Install
+
+3. **Open PowerShell or Command Prompt** and run:
+
+```powershell
+git clone https://github.com/Durgaa17/cf-edge-scanner.git
+cd cf-edge-scanner
+go run scan.go
+```
+
+4. (Optional) Build a single `.exe` file:
+
+```powershell
+go build -o cf-edge-scanner.exe scan.go
+.\cf-edge-scanner.exe
+```
+
+---
+
+#### Termux (Android)
 ```bash
 pkg update && pkg upgrade -y
 pkg install golang git -y
@@ -43,17 +70,10 @@ cd cf-edge-scanner
 go run scan.go
 ```
 
-#### Build a single binary (optional)
+#### Build a single binary (Linux/macOS)
 ```bash
 go build -o cf-edge-scanner scan.go
 ./cf-edge-scanner
-```
-
-#### Windows
-```powershell
-git clone https://github.com/Durgaa17/cf-edge-scanner.git
-cd cf-edge-scanner
-go run scan.go
 ```
 
 ---
@@ -73,7 +93,7 @@ python scan.py
 ```bash
 git clone https://github.com/Durgaa17/cf-edge-scanner.git
 cd cf-edge-scanner
-python3 scan.py          # or python on Windows
+python3 scan.py          # or just `python` on Windows
 ```
 
 ---
@@ -132,6 +152,7 @@ TIMEOUT = 0.8     # Ping timeout in seconds
 - Large ranges (`104.16.0.0/13`, `172.64.0.0/13`, `162.158.0.0/15`) contain hundreds of thousands of IPs. Scanning all of them takes a long time.
 - On Termux you may need to grant network permission and keep the screen on.
 - Go version is significantly faster and uses less memory than Python.
+- On Windows 11, after installing Go you may need to **restart PowerShell** (or reboot once) so the `go` command is recognized.
 
 ---
 
